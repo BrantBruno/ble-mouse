@@ -7,6 +7,8 @@
 #include <Wire.h>
 #include "MPU6050.h"
 #include "MahonyAHRS.h"
+#include "esp_sleep.h"
+#include "driver/rtc_io.h"
 
 #define SENSITIVITY 60
 #define MPU6050_ACC_GAIN 16384.0
@@ -14,6 +16,7 @@
 #define BOTAO_PIN 10
 #define BOTAO2_PIN 7
 #define LED_PIN 8
+#define SLEEP_BUTTON_PIN 6
 #define SAMPLE_FREQ 100.0f
 
 float axR, ayR, azR, gxR, gyR, gzR;
@@ -28,9 +31,10 @@ const int MPU_addr=0x68;  // I2C address of the MPU-6050
 int16_t AcX, AcY, AcZ, Tmp, GyX, GyY, GyZ;
 extern float yaw_mahony,pitch_mahony,roll_mahony;
 
+
 class MouseIMU {
 public:
-  MouseIMU() : deviceConnected(false), report{ 0, 0, 0, 0 } {}
+  MouseIMU() : deviceConnected(false), report{ 0, 0, 0, 0 }, sleepMode(false) {}
 
   void init() {
     Serial.begin(115200);
@@ -40,12 +44,18 @@ public:
     initBLE();
     initButtons();
     initMahony();
-
+    initSleepButton();
   }
 
   void update() {
     checkButtons();
-    if (deviceConnected) {
+    checkSleepButton();
+    
+    if (sleepMode) {
+      goToLightSleep();
+    }
+    
+    if (deviceConnected && !sleepMode) {
       updateMouseReport();
       input->setValue(report, sizeof(report));
       input->notify();
@@ -62,11 +72,15 @@ private:
   int buttonState;
   int lastButton2State = HIGH;  
   int button2State;
+  int lastSleepButtonState = HIGH;
+  int sleepButtonState;
   unsigned long lastDebounceTime = 0;
-  unsigned long lastDebounceTime2 = 0;  
+  unsigned long lastDebounceTime2 = 0;
+  unsigned long lastSleepDebounceTime = 0;
   unsigned long debounceDelay = 50;
   uint8_t report[4];
   bool blinkState = false;
+  bool sleepMode;
 
   float axg, ayg, azg, gxrs, gyrs, gzrs;
 
@@ -85,6 +99,50 @@ private:
     pinMode(BOTAO_PIN, INPUT_PULLUP);
     pinMode(BOTAO2_PIN, INPUT_PULLUP);
     Serial.println("Buttons initialized");
+  }
+
+    void initSleepButton() {
+    pinMode(SLEEP_BUTTON_PIN, INPUT_PULLUP);
+    // Configure SLEEP_BUTTON_PIN for external wake up
+    esp_sleep_enable_gpio_wakeup();
+    gpio_wakeup_enable((gpio_num_t)SLEEP_BUTTON_PIN, GPIO_INTR_LOW_LEVEL);
+    Serial.println("Sleep button initialized");
+  }
+
+  void checkSleepButton() {
+    int reading = digitalRead(SLEEP_BUTTON_PIN);
+
+    if (reading != lastSleepButtonState) {
+      lastSleepDebounceTime = millis();
+    }
+
+    if ((millis() - lastSleepDebounceTime) > debounceDelay) {
+      if (reading != sleepButtonState) {
+        sleepButtonState = reading;
+        if (sleepButtonState == LOW) {
+          sleepMode = !sleepMode;
+          Serial.println(sleepMode ? "Entering light sleep mode" : "Exiting light sleep mode");
+        }
+      }
+    }
+
+    lastSleepButtonState = reading;
+  }
+
+  void goToLightSleep() {
+    Serial.println("Going to light sleep...");
+    
+    // Configure specific RTC GPIO for wake up
+    gpio_pullup_en((gpio_num_t)SLEEP_BUTTON_PIN);
+    //gpio_pulldown_dis((gpio_num_t)SLEEP_BUTTON_PIN);
+    
+    esp_light_sleep_start();
+    
+    // After waking up
+    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO) {
+      sleepMode = false;
+      Serial.println("Woke up from light sleep");
+    }
   }
 
   void initMahony() {
