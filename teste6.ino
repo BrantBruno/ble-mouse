@@ -103,7 +103,7 @@ private:
 
     void initSleepButton() {
     pinMode(SLEEP_BUTTON_PIN, INPUT_PULLUP);
-    // Configure SLEEP_BUTTON_PIN for external wake up
+    
     esp_sleep_enable_gpio_wakeup();
     gpio_wakeup_enable((gpio_num_t)SLEEP_BUTTON_PIN, GPIO_INTR_LOW_LEVEL);
     Serial.println("Sleep button initialized");
@@ -132,13 +132,13 @@ private:
   void goToLightSleep() {
     Serial.println("Going to light sleep...");
     
-    // Configure specific RTC GPIO for wake up
+    
     gpio_pullup_en((gpio_num_t)SLEEP_BUTTON_PIN);
     //gpio_pulldown_dis((gpio_num_t)SLEEP_BUTTON_PIN);
     
     esp_light_sleep_start();
     
-    // After waking up
+    
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO) {
       sleepMode = false;
       Serial.println("Woke up from light sleep");
@@ -156,7 +156,7 @@ private:
     int reading = digitalRead(BOTAO_PIN);
     int reading2 = digitalRead(BOTAO2_PIN);
 
-    // First button
+    
     if (reading != lastButtonState) {
       lastDebounceTime = millis();
     }
@@ -169,7 +169,7 @@ private:
 
     lastButtonState = reading;
 
-    // Second button
+    
     if (reading2 != lastButton2State) {
       lastDebounceTime2 = millis();
     }
