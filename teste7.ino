@@ -9,6 +9,7 @@
 #include "MahonyAHRS.h"
 #include "esp_sleep.h"
 #include "driver/rtc_io.h"
+#include <EEPROM.h>
 
 #define SENSITIVITY 60
 #define MPU6050_ACC_GAIN 16384.0
@@ -18,7 +19,10 @@
 #define LED_PIN 8
 #define SLEEP_BUTTON_PIN 6
 #define SAMPLE_FREQ 100.0f
+#define EEPROM_SIZE 64  // Ajuste o tamanho da EEPROM conforme necessário
 
+int16_t AcX, AcY, AcZ, GyX, GyY, GyZ;
+extern float yaw_mahony, pitch_mahony, roll_mahony;
 float axR, ayR, azR, gxR, gyR, gzR;
 float axg, ayg, azg, gxrs, gyrs, gzrs;
 //float ax_filtro, ay_filtro, az_filtro, gx_filtro, gy_filtro, gz_filtro;
@@ -28,18 +32,16 @@ const int MPU_addr=0x68;  // I2C address of the MPU-6050
 /*********************************************************************
  * External variables
  */
-int16_t AcX, AcY, AcZ, Tmp, GyX, GyY, GyZ;
-extern float yaw_mahony,pitch_mahony,roll_mahony;
-
 
 class MouseIMU {
 public:
-  MouseIMU() : deviceConnected(false), report{ 0, 0, 0, 0 }, sleepMode(false) {}
+  MouseIMU() : deviceConnected(false), report{ 0, 0, 0, 0 }, sleepMode(false), addr_eep(0) {}
 
   void init() {
     Serial.begin(115200);
     Serial.println("Initializing BLE Mouse");
 
+    EEPROM.begin(EEPROM_SIZE);  // Inicializa a EEPROM
     initMPU();
     initBLE();
     initButtons();
@@ -82,7 +84,19 @@ private:
   bool blinkState = false;
   bool sleepMode;
 
-  float axg, ayg, azg, gxrs, gyrs, gzrs;
+  int addr_eep;  // Endereço da EEPROM
+  typedef struct {
+    int32_t x;
+    int32_t y;
+    int32_t z;
+  } calibration_t;
+  typedef union {
+    calibration_t xyz;
+    uint8_t buffer[12];
+  } calibrationUnion_t;
+  
+  calibrationUnion_t calibValues;
+  float GyX_offset, GyY_offset, GyZ_offset;
 
   void initMPU() {
     Wire.begin();
@@ -93,7 +107,71 @@ private:
       while (1);
     }
     Serial.println("MPU6050 connected");
+
+    if (IMU_calibration()) {
+      Serial.println("IMU Calibration successful");
+    } else {
+      Serial.println("IMU Calibration failed");
+    }
   }
+  void filtraIMU() {
+    axg = (float)(AcX) / MPU6050_ACC_GAIN;
+    ayg = (float)(AcY) / MPU6050_ACC_GAIN;
+    azg = (float)(AcZ) / MPU6050_ACC_GAIN;
+    gxrs = (float)(GyX - GyX_offset) / MPU6050_GYRO_GAIN * 0.01745329;
+    gyrs = (float)(GyY - GyY_offset) / MPU6050_GYRO_GAIN * 0.01745329;
+    gzrs = (float)(GyZ - GyZ_offset) / MPU6050_GYRO_GAIN * 0.01745329;
+  }
+
+  bool IMU_calibration() {
+    static bool calibrated = false;
+    static int state = 0;
+    static int32_t counter = 0;
+    static int32_t samples_x = 0;
+    static int32_t samples_y = 0;
+    static int32_t samples_z = 0;
+    byte value;
+    
+    // Ler EEPROM 
+    value = EEPROM.read(addr_eep);
+    
+    if (value == 1) {
+      calibrated = true;
+      // Copia os offsets de calibração anteriores
+      for (int i = 0; i < 12; i++) {
+        calibValues.buffer[i] = EEPROM.read(addr_eep + i + 1);
+      }
+      GyX_offset = calibValues.xyz.x;
+      GyY_offset = calibValues.xyz.y;
+      GyZ_offset = calibValues.xyz.z;
+    } else if (!calibrated) {           
+        if (counter < 10000) {
+          samples_x += GyX;
+          samples_y += GyY;
+          samples_z += GyZ;
+          counter++;
+        } else {
+          GyX_offset = samples_x / 10000;
+          GyY_offset = samples_y / 10000;
+          GyZ_offset = samples_z / 10000;
+          calibValues.xyz.x = GyX_offset;
+          calibValues.xyz.y = GyY_offset;
+          calibValues.xyz.z = GyZ_offset;
+
+          // Escreve os valores na EEPROM
+          EEPROM.write(addr_eep, 1);
+          for (int i = 0; i < 12; i++) {
+            EEPROM.write(addr_eep + i + 1, calibValues.buffer[i]);
+          }
+          EEPROM.commit();
+          calibrated = true;
+          Serial.println(calibrated);
+        }
+    }
+    return calibrated;
+  }
+
+  
 
   void initButtons() {
     pinMode(BOTAO_PIN, INPUT_PULLUP);
@@ -251,17 +329,6 @@ private:
     }
     
 
-    
-
-  void filtraIMU() {
-    axg = (float)(AcX) / MPU6050_ACC_GAIN;
-    ayg = (float)(AcY) / MPU6050_ACC_GAIN;
-    azg = (float)(AcZ) / MPU6050_ACC_GAIN;
-    gxrs = (float)(GyX - (-143)) / MPU6050_GYRO_GAIN * 0.01745329;
-    gyrs = (float)(GyY - (245)) / MPU6050_GYRO_GAIN * 0.01745329;
-    gzrs = (float)(GyZ - (25)) / MPU6050_GYRO_GAIN * 0.01745329;
-  }
-
   int8_t mouseHoriz() {
     static float horzZero = 0.0f;
     float horzValue = (pitch_mahony - horzZero) * SENSITIVITY;
@@ -279,17 +346,22 @@ private:
   void updateMouseReport() {
     mpu.getMotion6(&AcX, &AcY, &AcZ, &GyX, &GyY, &GyZ);
     filtraIMU();
-    MahonyAHRSupdateIMU(gxrs, gyrs, gzrs, axg, ayg, azg);
+    if(IMU_calibration())
+  {
+    //MahonyAHRSupdateIMU( gxrs,  gyrs,  gzrs , axg,  ayg,  azg);
+    MahonyAHRSupdateIMU(gyrs, gzrs, gxrs, ayg, azg, axg);
     getRollPitchYaw_mahony();
-
     int8_t xchg = mouseHoriz() * 2;
     int8_t ychg = mouseVert() * 2;
-
+  
     report[0] = (!buttonState << 0) | (!button2State << 1);
     report[1] = xchg;
     report[2] = ychg;
     report[3] = 0;
-    Serial.printf("X: %d, Y: %d: %d\n", xchg, ychg);
+    //Serial.printf("X: %d, Y: %d: %d\n", xchg, ychg);
+    
+  
+  }
     
   }
 
