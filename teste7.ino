@@ -122,7 +122,7 @@ private:
     gyrs = (float)(GyY - GyY_offset) / MPU6050_GYRO_GAIN * 0.01745329;
     gzrs = (float)(GyZ - GyZ_offset) / MPU6050_GYRO_GAIN * 0.01745329;
   }
-
+#define SAMPLES 100
   bool IMU_calibration() {
     static bool calibrated = false;
     static int state = 0;
@@ -145,15 +145,14 @@ private:
       GyY_offset = calibValues.xyz.y;
       GyZ_offset = calibValues.xyz.z;
     } else if (!calibrated) {           
-        if (counter < 10000) {
+        if (counter < SAMPLES) {
           samples_x += GyX;
           samples_y += GyY;
           samples_z += GyZ;
-          counter++;
         } else {
-          GyX_offset = samples_x / 10000;
-          GyY_offset = samples_y / 10000;
-          GyZ_offset = samples_z / 10000;
+          GyX_offset = samples_x / SAMPLES;
+          GyY_offset = samples_y / SAMPLES;
+          GyZ_offset = samples_z / SAMPLES;
           calibValues.xyz.x = GyX_offset;
           calibValues.xyz.y = GyY_offset;
           calibValues.xyz.z = GyZ_offset;
@@ -165,9 +164,10 @@ private:
           }
           EEPROM.commit();
           calibrated = true;
-          Serial.println(calibrated);
+          Serial.println("calibração concluida");
         }
     }
+    counter ++;
     return calibrated;
   }
 
