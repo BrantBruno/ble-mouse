@@ -11,15 +11,14 @@
 #include "driver/rtc_io.h"
 #include <EEPROM.h>
 
-#define SENSITIVITY 60
+
+#define SENSITIVITY 100
 #define MPU6050_ACC_GAIN 16384.0
 #define MPU6050_GYRO_GAIN 131.072
 #define BOTAO_PIN 10
 #define BOTAO2_PIN 7
-#define LED_PIN 8
 #define SLEEP_BUTTON_PIN 6
-#define SAMPLE_FREQ 100.0f
-#define EEPROM_SIZE 64  // Ajuste o tamanho da EEPROM conforme necessário
+#define EEPROM_SIZE 512  // Ajuste o tamanho da EEPROM conforme necessário
 
 int16_t AcX, AcY, AcZ, GyX, GyY, GyZ;
 extern float yaw_mahony, pitch_mahony, roll_mahony;
@@ -122,7 +121,7 @@ private:
     gyrs = (float)(GyY - GyY_offset) / MPU6050_GYRO_GAIN * 0.01745329;
     gzrs = (float)(GyZ - GyZ_offset) / MPU6050_GYRO_GAIN * 0.01745329;
   }
-#define SAMPLES 100
+#define SAMPLES 1000
   bool IMU_calibration() {
     static bool calibrated = false;
     static int state = 0;
