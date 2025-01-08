@@ -18,7 +18,7 @@
 #define BOTAO_PIN 10
 #define BOTAO2_PIN 7
 #define SLEEP_BUTTON_PIN 6
-#define EEPROM_SIZE 512  // Ajuste o tamanho da EEPROM conforme necessário
+#define EEPROM_SIZE 512  
 
 int16_t AcX, AcY, AcZ, GyX, GyY, GyZ;
 extern float yaw_mahony, pitch_mahony, roll_mahony;
@@ -27,10 +27,8 @@ float axg, ayg, azg, gxrs, gyrs, gzrs;
 //float ax_filtro, ay_filtro, az_filtro, gx_filtro, gy_filtro, gz_filtro;
 bool conectado = false;
 //float yaw_filtro, pitch_filtro, roll_filtro;
-const int MPU_addr = 0x68;  // I2C address of the MPU-6050
-/*********************************************************************
- * External variables
- */
+const int MPU_addr = 0x68;  
+
 
 class MouseIMU {
 public:
@@ -41,7 +39,7 @@ public:
     Serial.begin(115200);
     Serial.println("Initializing BLE Mouse");
 
-    EEPROM.begin(EEPROM_SIZE);  // Inicializa a EEPROM
+    EEPROM.begin(EEPROM_SIZE); 
     initMPU();
     initBLE();
     initButtons();
@@ -90,7 +88,7 @@ private:
   bool blinkState = false;
   bool sleepMode;
 
-  int addr_eep;  // Endereço da EEPROM
+  int addr_eep;  
   typedef struct {
     int32_t x;
     int32_t y;
@@ -127,16 +125,16 @@ private:
   }
 
 
-#define SAMPLES 100  // Número de amostras para a calibração
-#define FILTER_SIZE 5  // Tamanho do buffer circular para medianas
-#define MEDIAN_ITERATIONS 3  // Número de medianas antes da média final
+#define SAMPLES 100  
+#define FILTER_SIZE 5  
+#define MEDIAN_ITERATIONS 3  
 
 float gyroX_buffer[FILTER_SIZE] = {0};
 float gyroY_buffer[FILTER_SIZE] = {0};
 float gyroZ_buffer[FILTER_SIZE] = {0};
 int buffer_index = 0;
 
-// Função para calcular a mediana de um array
+// Função para calcular a mediana
 float calculateMedian(float arr[], int size) {
     float sorted[size];
     memcpy(sorted, arr, size * sizeof(float));
@@ -190,7 +188,7 @@ bool IMU_calibration() {
         GyZ_offset = calibValues.xyz.z;
     } else if (!calibrated) {
         if (counter < SAMPLES) {
-            // Aplica o filtro antes de somar as leituras
+         
             samples_x += filterMedianAverage(GyX, gyroX_buffer, FILTER_SIZE);
             samples_y += filterMedianAverage(GyY, gyroY_buffer, FILTER_SIZE);
             samples_z += filterMedianAverage(GyZ, gyroZ_buffer, FILTER_SIZE);
@@ -395,7 +393,7 @@ bool IMU_calibration() {
   }
   int8_t mouseHoriz(void) {
     static float horzZero = 0.0f;
-    static float horzValue = 0.0f;  // Stores current analog output of each axis
+    static float horzValue = 0.0f;  
     static float roll_corrigido = 0.0f;
     static int amostragem = 5;
     roll_corrigido = corrigePitch(roll_mahony);
@@ -428,7 +426,7 @@ bool IMU_calibration() {
   }
   int8_t mouseVert(void) {
     static float vertZero = 0.0f;
-    static float vertValue = 0.0f;  // Stores current analog output of each axis
+    static float vertValue = 0.0f;  
     static float pitch_corrigido = 0.0f;
     static int amostragem = 5;
     pitch_corrigido = corrigePitch(pitch_mahony);
